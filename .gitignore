@@ -1,0 +1,12 @@
+node_modules/
+data/
+.env
+__pycache__/
+*.pyc
+ai/.venv/
+ai/models/
+ai/out/
+models/
+.claude/
+.DS_Store
+*.log

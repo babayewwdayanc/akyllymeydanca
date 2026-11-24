@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="tk">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0B3D2A">
+  <title>Akylly Meýdança</title>
+  <meta name="description" content="Oýnuňyzyň wideosy we statistikasy: paslar, ýalňyşlyklar, tizlik, MVP we oýunçy karty.">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/app.css">
+</head>
+<body>
+  <header class="topbar">
+    <a href="#/" class="brand" aria-label="Baş sahypa">
+      <svg viewBox="0 0 32 32" aria-hidden="true"><path d="M16 1.5l5.2 3.4 6.2.4.4 6.2 3.4 5.2-3.4 5.2-.4 6.2-6.2.4L16 30.5l-5.2-3.4-6.2-.4-.4-6.2L.8 16l3.4-5.2.4-6.2 6.2-.4z" fill="#fff"/><path d="M16 8l8 8-8 8-8-8z" fill="#D42A20"/><path d="M16 12.5l3.5 3.5-3.5 3.5-3.5-3.5z" fill="#fff"/></svg>
+      <span>Akylly Meýdança</span>
+    </a>
+    <a href="#/admin" class="topbar-link" id="adminLink">Meýdança üçin</a>
+  </header>
+  <div class="carpet-strip" aria-hidden="true"></div>
+  <main id="app" tabindex="-1"></main>
+  <nav class="tabbar" id="tabbar" hidden>
+    <a href="#/" data-tab="home"><svg viewBox="0 0 24 24"><path d="M3 5h18v14H3z M12 5v14 M3 9h3v6H3 M21 9h-3v6h3" fill="none" stroke="currentColor" stroke-width="1.8"/></svg><span>Oýunlar</span></a>
+    <a href="#/card" data-tab="card"><svg viewBox="0 0 24 24"><path d="M7 2h10l3 3v16H4V5z" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="12" cy="10" r="3" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M8 17h8" stroke="currentColor" stroke-width="1.8"/></svg><span>Kart</span></a>
+    <a href="#/top" data-tab="top"><svg viewBox="0 0 24 24"><path d="M4 20V12h4v8 M10 20V6h4v14 M16 20v-5h4v5" fill="none" stroke="currentColor" stroke-width="1.8"/></svg><span>Reýting</span></a>
+    <a href="#/me" data-tab="me"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M4 21c1-4 4-6 8-6s7 2 8 6" fill="none" stroke="currentColor" stroke-width="1.8"/></svg><span>Profil</span></a>
+  </nav>
+  <div id="toast" role="status" aria-live="polite"></div>
+  <script type="module" src="/js/app.js"></script>
+</body>
+</html>
