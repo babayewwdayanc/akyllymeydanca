@@ -5,13 +5,13 @@ import { onboardView, loginView } from './views/onboard.js';
 import { homeView } from './views/home.js';
 import { matchView } from './views/match.js';
 import { cardView, meView, playerView, topView, clipView } from './views/profile.js';
-import { adminView } from './views/admin.js';
+import { adminView } from './views/admin/index.js';
 
 const routes = [
   [/^\/welcome$/, onboardView, { public: true, wide: 'onboard-wide' }],
   [/^\/login$/, loginView, { public: true }],
   [/^\/clip\/(\w+)$/, clipView, { public: true }],
-  [/^\/admin$/, adminView, { public: true, wide: 'wide' }],
+  [/^\/admin(?:\/([a-z]+))?(?:\/(\d+))?$/, adminView, { public: true, wide: 'wide', admin: true }],
   [/^\/$/, homeView, { tab: 'home' }],
   [/^\/match\/(\d+)$/, matchView, { tab: 'home' }],
   [/^\/card$/, cardView, { tab: 'card' }],
@@ -27,13 +27,18 @@ export async function refreshMe() {
   return session.me;
 }
 
+/** #/admin/matches?status=ready → URLSearchParams({status: 'ready'}) */
+export function routeQuery() {
+  return new URLSearchParams(location.hash.split('?')[1] || '');
+}
+
 export function go(path) {
   if (location.hash === `#${path}`) render();
   else location.hash = path;
 }
 
 async function render() {
-  const path = location.hash.replace(/^#/, '') || '/';
+  const path = location.hash.replace(/^#/, '').split('?')[0] || '/';
   const app = $('#app');
   if (cleanup) { try { cleanup(); } catch { /* ignore */ } cleanup = null; }
 
@@ -53,9 +58,9 @@ async function render() {
   }
 
   app.className = opts.wide || '';
-  $('#tabbar').hidden = !session.token || path === '/welcome' || path === '/login';
+  $('#tabbar').hidden = !session.token || path === '/welcome' || path === '/login' || !!opts.admin;
   document.querySelectorAll('#tabbar a').forEach((a) => a.classList.toggle('active', a.dataset.tab === opts.tab));
-  $('#adminLink').hidden = path === '/admin';
+  $('#adminLink').hidden = path.startsWith('/admin');
 
   app.replaceChildren(loading());
   try {

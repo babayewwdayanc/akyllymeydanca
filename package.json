@@ -9,7 +9,9 @@
     "dev": "node --watch server/index.js",
     "test": "node --test \"test/*.test.js\" && python3 -I ai/test_events.py",
     "models": "node scripts/fetch-models.mjs",
-    "postinstall": "node scripts/fetch-models.mjs || echo \"Модель фона не скачалась — запустите npm run models\""
+    "postinstall": "node scripts/fetch-models.mjs || echo \"Модель фона не скачалась — запустите npm run models\"",
+    "admin:create": "node scripts/create-admin.mjs",
+    "db:import-sqlite": "node scripts/sqlite-to-postgres.mjs"
   },
   "engines": {
     "node": ">=22.13"
@@ -20,6 +22,7 @@
     "multer": "^2.0.2",
     "onnxruntime-node": "^1.31.1",
     "onnxruntime-web": "^1.31.1",
+    "pg": "^8.23.1",
     "sharp": "^0.35.5"
   }
 }

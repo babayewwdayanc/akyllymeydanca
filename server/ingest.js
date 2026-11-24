@@ -3,7 +3,7 @@
 // Всё остальное — проценты, оценки, MVP, награды — считает сервер, одинаково для любого источника.
 import fs from 'node:fs';
 import path from 'node:path';
-import { db, tx, DIRS } from './db.js';
+import { one, tx, insertMany, DIRS } from './db.js';
 import { matchRating } from './rating.js';
 
 const SPRINT_MS = 5.5; // ≈ 19.8 км/ч — порог спринта
@@ -122,11 +122,11 @@ export function computeTrackStats(a) {
   return stats;
 }
 
-export function ingestAnalysis(matchId, a) {
+export async function ingestAnalysis(matchId, a) {
   const errs = validateAnalysis(a);
   if (errs.length) throw Object.assign(new Error('Derňewiň formaty nädogry: ' + errs.join('; ')), { status: 400 });
 
-  const match = db.prepare('SELECT * FROM matches WHERE id = ?').get(matchId);
+  const match = await one('SELECT * FROM matches WHERE id = $1', [matchId]);
   if (!match) throw Object.assign(new Error('Oýun tapylmady'), { status: 404 });
 
   // Сырые данные (координаты для 2D-повтора) — в файл, в базе только итоговая статистика.
@@ -145,26 +145,21 @@ export function ingestAnalysis(matchId, a) {
     s.rating = matchRating(s, { won: mine > theirs, draw: mine === theirs, minutes });
   }
 
-  tx(() => {
+  await tx(async (db) => {
     // Повторный анализ: сохраняем, кто какой трек отметил как «это я».
-    const claims = new Map(db.prepare('SELECT track_no, player_id FROM tracks WHERE match_id = ? AND player_id IS NOT NULL').all(matchId).map((r) => [r.track_no, r.player_id]));
-    db.prepare('DELETE FROM tracks WHERE match_id = ?').run(matchId);
-    db.prepare('DELETE FROM events WHERE match_id = ?').run(matchId);
-    const insT = db.prepare(`INSERT INTO tracks (match_id, track_no, team, jersey, role, thumbnail, player_id, goals, assists, shots, shots_on_target,
-      passes, passes_completed, turnovers, tackles, interceptions, saves, touches, distance_m, top_speed_kmh, sprints, max_shot_kmh, rating, heatmap)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`);
-    for (const s of Object.values(stats)) {
-      insT.run(matchId, s.track_no, s.team, s.jersey, s.role, s.thumbnail, claims.get(s.track_no) ?? null, s.goals, s.assists, s.shots,
-        s.shots_on_target, s.passes, s.passes_completed, s.turnovers, s.tackles, s.interceptions, s.saves, s.touches,
-        s.distance_m, s.top_speed_kmh, s.sprints, s.max_shot_kmh, s.rating, s.heatmap ? JSON.stringify(s.heatmap) : null);
-    }
-    const insE = db.prepare('INSERT INTO events (match_id, t, type, team, track_no, target_track_no, success, x, y, speed_kmh) VALUES (?,?,?,?,?,?,?,?,?,?)');
-    for (const e of a.events) {
-      insE.run(matchId, e.t, e.type, e.team ?? null, e.track_no ?? null, e.target_track_no ?? null,
-        e.success === undefined || e.success === null ? null : e.success ? 1 : 0, e.x ?? null, e.y ?? null, e.speed_kmh ?? null);
-    }
-    db.prepare(`UPDATE matches SET score_a = ?, score_b = ?, possession_a = ?, status = 'ready', analysis_source = ?, error = NULL WHERE id = ?`)
-      .run(scoreA, scoreB, a.possession?.A ?? null, a.source || 'unknown', matchId);
+    const claims = new Map((await db.q('SELECT track_no, player_id FROM tracks WHERE match_id = $1 AND player_id IS NOT NULL', [matchId])).map((r) => [r.track_no, r.player_id]));
+    await db.run('DELETE FROM tracks WHERE match_id = $1', [matchId]);
+    await db.run('DELETE FROM events WHERE match_id = $1', [matchId]);
+    await insertMany(db, 'tracks', ['match_id', 'track_no', 'team', 'jersey', 'role', 'thumbnail', 'player_id', 'goals', 'assists', 'shots', 'shots_on_target',
+      'passes', 'passes_completed', 'turnovers', 'tackles', 'interceptions', 'saves', 'touches', 'distance_m', 'top_speed_kmh', 'sprints', 'max_shot_kmh', 'rating', 'heatmap'],
+    Object.values(stats).map((s) => [matchId, s.track_no, s.team, s.jersey, s.role, s.thumbnail, claims.get(s.track_no) ?? null, s.goals, s.assists, s.shots,
+      s.shots_on_target, s.passes, s.passes_completed, s.turnovers, s.tackles, s.interceptions, s.saves, s.touches,
+      s.distance_m, s.top_speed_kmh, s.sprints, s.max_shot_kmh, s.rating, s.heatmap ? JSON.stringify(s.heatmap) : null]));
+    await insertMany(db, 'events', ['match_id', 't', 'type', 'team', 'track_no', 'target_track_no', 'success', 'x', 'y', 'speed_kmh'],
+      a.events.map((e) => [matchId, e.t, e.type, e.team ?? null, e.track_no ?? null, e.target_track_no ?? null,
+        e.success === undefined || e.success === null ? null : e.success ? 1 : 0, e.x ?? null, e.y ?? null, e.speed_kmh ?? null]));
+    await db.run(`UPDATE matches SET score_a = $1, score_b = $2, possession_a = $3, status = 'ready', analysis_source = $4, error = NULL WHERE id = $5`,
+      [scoreA, scoreB, a.possession?.A ?? null, a.source || 'unknown', matchId]);
   });
   return { tracks: Object.keys(stats).length, events: a.events.length, score: [scoreA, scoreB] };
 }

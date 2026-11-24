@@ -10,3 +10,6 @@ models/
 .claude/
 .DS_Store
 *.log
+.npm/
+backups/
+.pm2/

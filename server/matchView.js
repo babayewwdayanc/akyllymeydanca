@@ -1,13 +1,20 @@
 // Сборка страницы матча: счёт, командная статистика, игроки, MVP, награды, хайлайты.
-import { db } from './db.js';
+import { q, one } from './db.js';
 import { matchAwards } from './rating.js';
 import { mvpTrackOf, playerMini } from './players.js';
 
 export const videoUrl = (m) => (m.video_file ? `/media/videos/${m.video_file}` : null);
 export const thumbUrl = (matchId, t) => (t ? `/media/thumbs/${matchId}/${t}` : null);
 
+/** Матч вместе с данными поля — используйте во всех запросах, после которых нужен matchSummary(). */
+export const MATCH_SELECT = `
+  SELECT m.*, p.name AS pitch_name, p.city AS pitch_city, p.length_m AS pitch_length, p.width_m AS pitch_width
+  FROM matches m JOIN pitches p ON p.id = m.pitch_id`;
+
+export const getMatch = (id) => one(`${MATCH_SELECT} WHERE m.id = $1`, [id]);
+export const getMatchByCode = (code) => one(`${MATCH_SELECT} WHERE m.code = $1`, [code]);
+
 export function matchSummary(m) {
-  const pitch = db.prepare('SELECT * FROM pitches WHERE id = ?').get(m.pitch_id);
   return {
     id: m.id,
     code: m.code,
@@ -17,7 +24,7 @@ export function matchSummary(m) {
     status: m.status,
     error: m.error,
     analysis_source: m.analysis_source,
-    pitch: pitch ? { id: pitch.id, name: pitch.name, city: pitch.city, length_m: pitch.length_m, width_m: pitch.width_m } : null,
+    pitch: { id: m.pitch_id, name: m.pitch_name, city: m.pitch_city, length_m: m.pitch_length, width_m: m.pitch_width },
     teams: {
       A: { name: m.team_a_name, color: m.team_a_color, score: m.score_a },
       B: { name: m.team_b_name, color: m.team_b_color, score: m.score_b },
@@ -58,7 +65,7 @@ function teamStats(tracks, team, possession) {
   const passes = sum('passes');
   const completed = sum('passes_completed');
   return {
-    possession: possession,
+    possession,
     passes,
     passes_completed: completed,
     pass_accuracy: passes ? Math.round((completed / passes) * 100) : 0,
@@ -71,18 +78,17 @@ function teamStats(tracks, team, possession) {
   };
 }
 
-export function matchDetail(m, viewerId) {
-  const summary = matchSummary(m);
-  const rows = db.prepare('SELECT * FROM tracks WHERE match_id = ? ORDER BY team, track_no').all(m.id);
-  const players = new Map(
-    db.prepare('SELECT p.* FROM players p JOIN tracks t ON t.player_id = p.id WHERE t.match_id = ?').all(m.id).map((p) => [p.id, p]),
-  );
+/** Треки матча с привязанными игроками (для страницы матча и админки). */
+export async function matchTracks(matchId) {
+  const rows = await q('SELECT * FROM tracks WHERE match_id = $1 ORDER BY team, track_no', [matchId]);
+  const ids = rows.map((r) => r.player_id).filter(Boolean);
+  const players = new Map((ids.length ? await q('SELECT * FROM players WHERE id = ANY($1::int[])', [ids]) : []).map((p) => [p.id, p]));
   const tracks = rows.map((t) => ({
     track_no: t.track_no,
     team: t.team,
     jersey: t.jersey,
     role: t.role,
-    thumbnail_url: thumbUrl(m.id, t.thumbnail),
+    thumbnail_url: thumbUrl(matchId, t.thumbnail),
     player: playerMini(players.get(t.player_id)),
     goals: t.goals, assists: t.assists, shots: t.shots, shots_on_target: t.shots_on_target,
     passes: t.passes, passes_completed: t.passes_completed,
@@ -92,14 +98,20 @@ export function matchDetail(m, viewerId) {
     tackles: t.tackles, interceptions: t.interceptions, saves: t.saves, touches: t.touches,
     distance_m: t.distance_m, top_speed_kmh: t.top_speed_kmh, sprints: t.sprints, max_shot_kmh: t.max_shot_kmh,
     rating: t.rating,
-    heatmap: t.heatmap ? JSON.parse(t.heatmap) : null,
+    heatmap: t.heatmap ?? null,
   }));
+  return { rows, tracks };
+}
+
+export async function matchDetail(m, viewerId) {
+  const summary = matchSummary(m);
+  const { rows, tracks } = await matchTracks(m.id);
   const trackMap = new Map(tracks.map((t) => [t.track_no, t]));
-  const events = db.prepare('SELECT t, type, team, track_no, target_track_no, success, x, y, speed_kmh FROM events WHERE match_id = ? ORDER BY t').all(m.id);
-  const mvp = mvpTrackOf(m.id);
+  const events = await q('SELECT t, type, team, track_no, target_track_no, success, x, y, speed_kmh FROM events WHERE match_id = $1 ORDER BY t, id', [m.id]);
+  const mvp = await mvpTrackOf(m.id);
   const votes = {};
-  for (const v of db.prepare('SELECT track_no, COUNT(*) AS n FROM votes WHERE match_id = ? GROUP BY track_no').all(m.id)) votes[v.track_no] = v.n;
-  const myVote = viewerId ? db.prepare('SELECT track_no FROM votes WHERE match_id = ? AND voter_id = ?').get(m.id, viewerId)?.track_no ?? null : null;
+  for (const v of await q('SELECT track_no, COUNT(*)::int AS n FROM votes WHERE match_id = $1 GROUP BY track_no', [m.id])) votes[v.track_no] = v.n;
+  const myVote = viewerId ? (await one('SELECT track_no FROM votes WHERE match_id = $1 AND voter_id = $2', [m.id, viewerId]))?.track_no ?? null : null;
   const myTrack = viewerId ? rows.find((r) => r.player_id === viewerId)?.track_no ?? null : null;
   const pa = m.possession_a ?? 0.5;
   const maxBall = events.reduce((mx, e) => (e.type === 'shot' || e.type === 'goal' ? Math.max(mx, e.speed_kmh || 0) : mx), 0);
